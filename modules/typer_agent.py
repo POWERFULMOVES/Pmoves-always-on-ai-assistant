@@ -10,9 +10,12 @@ from modules.utils import (
 )
 from modules.deepseek import prefix_prompt
 from modules.execute_python import execute_uv_python, execute
+from modules.gradio_tts import GradioTTS
 from elevenlabs import play
 from elevenlabs.client import ElevenLabs
 import time
+import simpleaudio as sa
+from modules.llm_provider import get_llm_response
 
 
 class TyperAgent:
@@ -20,7 +23,11 @@ class TyperAgent:
         self.logger = logger
         self.session_id = session_id
         self.log_file = build_file_name_session("session.log", session_id)
-        self.elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
+        self.voice = get_config("typer_assistant.voice")
+        if self.voice == "elevenlabs":
+            self.elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
+        elif self.voice == "gradio":
+            self.gradio_tts_client = GradioTTS()
         self.previous_successful_requests = []
         self.previous_responses = []
 
@@ -134,10 +141,14 @@ class TyperAgent:
                 typer_file, scratchpad, context_files, text
             )
 
-            # Generate command using DeepSeek
-            self.logger.info("🤖 Processing text with DeepSeek...")
+            # Generate command using the configured brain
+            self.logger.info("🤖 Processing text with configured brain...")
             prefix = f"uv run python {typer_file}"
-            command = prefix_prompt(prompt=formatted_prompt, prefix=prefix)
+            command = get_llm_response(
+                prompt=formatted_prompt, 
+                assistant_type="typer_assistant",
+                prefix=prefix
+            )
 
             if command == prefix.strip():
                 self.logger.info(f"🤖 Command not found for '{text}'")
@@ -207,29 +218,38 @@ class TyperAgent:
             "{{personal_ai_assistant_name}}", assistant_name
         )
         prompt_prefix = f"Your Conversational Response: "
-        response = prefix_prompt(
-            prompt=response_prompt, prefix=prompt_prefix, no_prefix=True
+        response = get_llm_response(
+            prompt=response_prompt,
+            assistant_type="typer_assistant",
+            prefix=prompt_prefix,
+            no_prefix=True
         )
         self.logger.info(f"🤖 Response: '{response}'")
         self.speak(response)
 
     def speak(self, text: str):
+        if self.voice == "elevenlabs":
+            start_time = time.time()
+            model = "eleven_flash_v2_5"
+            voice = get_config("typer_assistant.elevenlabs_voice")
 
-        start_time = time.time()
-        model = "eleven_flash_v2_5"
-        # model="eleven_flash_v2"
-        # model = "eleven_turbo_v2"
-        # model = "eleven_turbo_v2_5"
-        # model="eleven_multilingual_v2"
-        voice = get_config("typer_assistant.elevenlabs_voice")
-
-        audio_generator = self.elevenlabs_client.generate(
-            text=text,
-            voice=voice,
-            model=model,
-            stream=False,
-        )
-        audio_bytes = b"".join(list(audio_generator))
-        duration = time.time() - start_time
-        self.logger.info(f"Model {model} completed tts in {duration:.2f} seconds")
-        play(audio_bytes)
+            audio_generator = self.elevenlabs_client.generate(
+                text=text,
+                voice=voice,
+                model=model,
+                stream=False,
+            )
+            audio_bytes = b"".join(list(audio_generator))
+            duration = time.time() - start_time
+            self.logger.info(f"Model {model} completed tts in {duration:.2f} seconds")
+            play(audio_bytes)
+        
+        elif self.voice == "gradio":
+            audio_file = build_file_name_session("response.wav", self.session_id)
+            self.gradio_tts_client.say(text, audio_file)
+            
+            # Play the audio file
+            wave_obj = sa.WaveObject.from_wave_file(audio_file)
+            play_obj = wave_obj.play()
+            play_obj.wait_done()
+            os.remove(audio_file)

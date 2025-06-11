@@ -1,8 +1,7 @@
 from typing import List, Dict
 import logging
 import os
-from modules.deepseek import conversational_prompt as deepseek_conversational_prompt
-from modules.ollama import conversational_prompt as ollama_conversational_prompt
+from modules.llm_provider import get_llm_response
 from modules.utils import build_file_name_session
 from RealtimeTTS import TextToAudioStream, SystemEngine
 from elevenlabs import play
@@ -10,6 +9,8 @@ from elevenlabs.client import ElevenLabs
 import pyttsx3
 import time
 from modules.assistant_config import get_config
+from modules.gradio_tts import GradioTTS
+import simpleaudio as sa
 
 
 class PlainAssistant:
@@ -21,7 +22,6 @@ class PlainAssistant:
         # Get voice configuration
         self.voice_type = get_config("base_assistant.voice")
         self.elevenlabs_voice = get_config("base_assistant.elevenlabs_voice")
-        self.brain = get_config("base_assistant.brain")
 
         # Initialize appropriate TTS engine
         if self.voice_type == "local":
@@ -38,6 +38,9 @@ class PlainAssistant:
         elif self.voice_type == "elevenlabs":
             self.logger.info("🔊 Initializing ElevenLabs TTS engine")
             self.elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
+        elif self.voice_type == "gradio":
+            self.logger.info("🔊 Initializing Gradio TTS engine")
+            self.gradio_tts_client = GradioTTS()
         else:
             raise ValueError(f"Unsupported voice type: {self.voice_type}")
 
@@ -55,16 +58,13 @@ class PlainAssistant:
 
             # Add user message to conversation history
             self.conversation_history.append({"role": "user", "content": text})
+            
+            # Create a string representation of the conversation history for the prompt
+            prompt_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in self.conversation_history])
 
             # Generate response using configured brain
-            self.logger.info(f"🤖 Processing text with {self.brain}...")
-            if self.brain.startswith("ollama:"):
-                model_no_prefix = ":".join(self.brain.split(":")[1:])
-                response = ollama_conversational_prompt(
-                    self.conversation_history, model=model_no_prefix
-                )
-            else:
-                response = deepseek_conversational_prompt(self.conversation_history)
+            self.logger.info(f"🤖 Processing text with configured brain...")
+            response = get_llm_response(prompt=prompt_history, assistant_type="base_assistant")
 
             # Add assistant response to history
             self.conversation_history.append({"role": "assistant", "content": response})
@@ -99,6 +99,16 @@ class PlainAssistant:
                     stream=False,
                 )
                 play(audio)
+            
+            elif self.voice_type == "gradio":
+                audio_file = build_file_name_session("response.wav", self.session_id)
+                self.gradio_tts_client.say(text, audio_file)
+                
+                # Play the audio file
+                wave_obj = sa.WaveObject.from_wave_file(audio_file)
+                play_obj = wave_obj.play()
+                play_obj.wait_done()
+                os.remove(audio_file)
 
             self.logger.info(f"🔊 Spoken: {text}")
 

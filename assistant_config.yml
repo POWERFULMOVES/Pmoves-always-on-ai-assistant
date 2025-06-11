@@ -1,14 +1,69 @@
 typer_assistant:
   assistant_name: Ada
   human_companion_name: Dan
+  active_brain: "deepseek_default"
   ears: realtime-stt
-  brain: deepseek-v3 # only deepseek-v3
-  voice: elevenlabs # local, elevenlabs
+  voice: gradio # local, elevenlabs, gradio
   elevenlabs_voice: WejK3H1m7MI9CHnIjW9K
 base_assistant:
   assistant_name: Ada
   human_companion_name: Dan
+  active_brain: "ollama_default"
   ears: realtime-stt
-  brain: ollama:phi4 # deepseek-v3, ollama:phi4, ollama:<any installed model>
-  voice: local # local, elevenlabs
+  voice: gradio # local, elevenlabs, gradio
   elevenlabs_voice: WejK3H1m7MI9CHnIjW9K
+
+brains:
+  deepseek_default:
+    type: "deepseek"
+    model: "deepseek-chat" # or other deepseek models
+  ollama_default:
+    type: "ollama"
+    model: "Gemma3" # any installed ollama model
+  lmstudio_default:
+    type: "openai" # LM Studio is OpenAI compatible
+    base_url: "http://localhost:1234/v1"
+    model: "deepseek/deepseek-r1-0528-qwen3-8b" # example model
+    api_key: "lm-studio"
+
+gradio_tts:
+  active_engine: "kokoro_default" # An identifier for the active engine config
+  reference_audio: "docs/audio/test.wav" # Path to reference audio for voice cloning, used by chatterbox and fish
+  engines:
+    kokoro_default:
+      type: "kokoro"
+      server_url: "http://100.91.242.98:4482/"
+      # Supports voice mixing, e.g., "af_heart * 0.7 + af_bella * 0.3"
+      voice: "af_heart"
+      speed: 1.0
+    chatterbox_clone:
+      type: "chatterbox"
+      server_url: "http://127.0.0.1:7861/" # Example of a different instance
+      exaggeration: 0.5
+      temperature: 0.8
+      cfg_weight: 0.5
+      chunk_size: 300
+      seed: 0
+    fish_custom:
+      type: "fish"
+      server_url: "http://127.0.0.1:7862/" # Example of a different instance
+      temperature: 0.8
+      top_p: 0.8
+      repetition_penalty: 1.1
+      max_tokens: 1024
+  # Audio effects are applied to the output of any engine
+  effects:
+    gain_db: 0
+    enable_eq: False
+    eq_bass: 0
+    eq_mid: 0
+    eq_treble: 0
+    enable_reverb: False
+    reverb_room: 0.3
+    reverb_damping: 0.5
+    reverb_wet: 0.3
+    enable_echo: False
+    echo_delay: 0.3
+    echo_decay: 0.5
+    enable_pitch: False
+    pitch_semitones: 0
